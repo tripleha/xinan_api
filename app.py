@@ -186,6 +186,8 @@ async def add_photo(_query: http.Body) -> dict:
                 result_t["imageID"] = r_t["imageID"]
                 result_t["face_to_loc"] = r_t["face_to_loc"]
                 result_t["privacy_loc"] = r_t["privacy_loc"]
+                result_t["scene"] = r_t["scene"]
+                result_t["score"] = r_t["score"]
                 result_t["code"] = 1
     except:
         print(traceback.format_exc())

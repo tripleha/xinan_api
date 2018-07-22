@@ -23,23 +23,17 @@ class APIProcessMain:
     def __init__(self):
         self.api_url = {
             "object": Config_g.get("api", "object"),
+            "baidu_object": Config_g.get("api", "baidu_object"),
             "ocr": Config_g.get("api", "ocr"),
             "text": Config_g.get("api", "text"),
-            "face_code": Config_g.get("api", "face_code"),
+            "privacy_degree": Config_g.get("api", "privacy_degree"),
+            "add_face": Config_g.get("api", "add_face"),
+            "delete_face": Config_g.get("api", "delete_face"),
+            "get_face": Config_g.get("api", "get_face"),
             "face_predict": Config_g.get("api", "face_predict"),
             "scene": Config_g.get("api", "scene"),
         }
         self.session = aiohttp.ClientSession()
-
-        self.model_path = os.path.abspath(os.path.join(
-            os.path.dirname(__file__), "..", "model_file"))
-        try:
-            if not os.path.isdir(self.model_path):
-                os.makedirs(self.model_path)
-        except:
-            pass
-        self.model_file = os.path.join(self.model_path, Config_g.get("api", "model_path"))
-        print(self.model_file)
 
     async def object_detect(self, _image_path):
         """
@@ -65,6 +59,30 @@ class APIProcessMain:
                 r_t += 1        
         return None, None
 
+    async def object_baidu(self, _image_path):
+        """
+        百度的物体检测API接口
+        """
+        url = self.api_url["baidu_object"]
+        post_data_t = {
+            "path": _image_path,
+        }
+        r_t = 0
+        while r_t <= 5:
+            try:
+                async with async_timeout.timeout(60):
+                    async with self.session.post(url, data=json.dumps(post_data_t)) as resp:
+                        resp_content = await resp.read()
+                        result_t = json.loads(resp_content)
+                        if result_t["code"] == 1:
+                            return result_t["ob_class"]
+                        else:
+                            return None
+            except:
+                print(traceback.format_exc())
+                r_t += 1        
+        return None
+
     async def ocr_detect(self, _image_path):
         """
         文字识别API接口
@@ -89,7 +107,7 @@ class APIProcessMain:
                 r_t += 1
         return None, None, None
 
-    async def text_detect(self, _image_path, _user_setting, _context_fenci, _context_pos, _context, _object_box, _class_name):
+    async def text_detect(self, _image_path, _user_setting, _context_fenci, _context_pos, _context, _object_box, _class_name, _object_class):
         """
         文字隐私校验API接口
         """
@@ -102,6 +120,7 @@ class APIProcessMain:
             "context": _context,
             "object_box": _object_box,
             "class_name": _class_name,
+            "object_class": _object_class,
         }
         r_t = 0
         while r_t <= 5:
@@ -119,13 +138,14 @@ class APIProcessMain:
                 r_t += 1
         return None
 
-    async def face_get_code(self, _image_path):
+    async def add_face(self, _image_path, _user_id):
         """
-        获取人脸的图片的计算编码
+        向百度人脸库添加人脸
         """
-        url = self.api_url["face_code"]
+        url = self.api_url["add_face"]
         post_data_t = {
-            "path": _image_path
+            "path": _image_path,
+            "user_id": _user_id,
         }
         r_t = 0
         while r_t <= 5:
@@ -135,13 +155,62 @@ class APIProcessMain:
                         resp_content = await resp.read()
                         result_t = json.loads(resp_content)
                         if result_t["code"] == 1:
-                            return result_t["face_code"]
+                            return result_t["token"]
                         else:
                             return None
             except:
                 print(traceback.format_exc())
                 r_t += 1
         return None
+
+    async def delete_face(self, _image_token, _user_id):
+        """
+        从百度人脸库删除人脸
+        """
+        url = self.api_url["delete_face"]
+        post_data_t = {
+            "token": _image_token,
+            "user_id": _user_id,
+        }
+        r_t = 0
+        while r_t <= 5:
+            try:
+                async with async_timeout.timeout(60):
+                    async with self.session.post(url, data=json.dumps(post_data_t)) as resp:
+                        resp_content = await resp.read()
+                        result_t = json.loads(resp_content)
+                        if result_t["code"] == 1:
+                            return True
+                        else:
+                            return False
+            except:
+                print(traceback.format_exc())
+                r_t += 1
+        return False
+
+    async def get_face(self, _image_path):
+        """
+        百度人脸检测API
+        """
+        url = self.api_url["get_face"]
+        post_data_t = {
+            "path": _image_path,
+        }
+        r_t = 0
+        while r_t <= 5:
+            try:
+                async with async_timeout.timeout(60):
+                    async with self.session.post(url, data=json.dumps(post_data_t)) as resp:
+                        resp_content = await resp.read()
+                        result_t = json.loads(resp_content)
+                        if result_t["code"] == 1:
+                            return True
+                        else:
+                            return False
+            except:
+                print(traceback.format_exc())
+                r_t += 1
+        return False
 
     async def face_predict(self, _image_path):
         """
@@ -150,7 +219,6 @@ class APIProcessMain:
         url = self.api_url["face_predict"]
         post_data_t = {
             "path": _image_path,
-            "model_path": self.model_file,
         }
         r_t = 0
         while r_t <= 5:
@@ -160,13 +228,13 @@ class APIProcessMain:
                         resp_content = await resp.read()
                         result_t = json.loads(resp_content)
                         if result_t["code"] == 1:
-                            return result_t["match_names"], result_t["match_locs"], result_t["name_to_loc"], result_t["face_locations"]
+                            return result_t["user_loc"]
                         else:
-                            return None, None, None, None
+                            return None
             except:
                 print(traceback.format_exc())
                 r_t += 1
-        return None, None, None, None
+        return None
 
     async def scene_detect(self, _image_path):
         """
@@ -184,7 +252,31 @@ class APIProcessMain:
                         resp_content = await resp.read()
                         result_t = json.loads(resp_content)
                         if result_t["code"] == 1:
-                            return result_t["result"]
+                            return result_t["environment_type"], result_t["scene_class"], result_t["scene_event"]
+                        else:
+                            return None, None, None
+            except:
+                print(traceback.format_exc())
+                r_t += 1
+        return None, None, None
+
+    async def privacy_degree(self, _features):
+        """
+        获取图片隐私评分
+        """
+        url = self.api_url["privacy_degree"]
+        post_data_t = {
+            "features": _features
+        }
+        r_t = 0
+        while r_t <= 5:
+            try:
+                async with async_timeout.timeout(60):
+                    async with self.session.post(url, data=json.dumps(post_data_t)) as resp:
+                        resp_content = await resp.read()
+                        result_t = json.loads(resp_content)
+                        if result_t["code"] == 1:
+                            return result_t["score"]
                         else:
                             return None
             except:

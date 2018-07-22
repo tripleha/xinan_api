@@ -57,12 +57,6 @@ class AlbumDBManager:
         )
         return str(result_t["nextID"])
 
-    def detect_scene_privacy(self, scene_result, scene_privacy):
-        for scene in scene_result:
-            if scene in scene_privacy and scene_result[scene] > 0.2:
-                return scene
-        return False
-
     async def add_photo(self, _user_id, _suffix, _text, _image_data):
         """
         向用户相册添加照片
@@ -80,16 +74,33 @@ class AlbumDBManager:
         # API调用
         loop = events.get_event_loop()
         object_task = loop.create_task(self.api_process.object_detect(tmp_img_path))
+        ob_baidu_task = loop.create_task(self.api_process.object_baidu(tmp_img_path))
         ocr_task = loop.create_task(self.api_process.ocr_detect(tmp_img_path))
         face_task = loop.create_task(self.api_process.face_predict(tmp_img_path))
+        get_face_task = loop.create_task(self.api_process.get_face(tmp_img_path))
         scene_task = loop.create_task(self.api_process.scene_detect(tmp_img_path))
-        await asyncio.wait([object_task, ocr_task,], return_when=asyncio.ALL_COMPLETED)
+        await asyncio.wait([object_task, ob_baidu_task, ocr_task, get_face_task, scene_task,], return_when=asyncio.ALL_COMPLETED)
         context_fenci_t, context_pos_t, context_t = ocr_task.result()
         object_box_t, object_name_t = object_task.result()
-        if object_box_t is None or context_fenci_t is None:
+        ob_class_t = ob_baidu_task.result()
+        face_flag_t = get_face_task.result()
+        environment_type_t, scene_class_t, scene_event_t = scene_task.result()
+        if object_box_t is None or context_fenci_t is None or ob_class_t is None or environment_type_t is None:
             # 接口调用失败，退出
             os.remove(tmp_img_path)
             return False
+        scene_t = self.user_manager.detect_scene_privacy(scene_class_t, user_privacy_t["scene_privacy"])
+        features_t = [list(), list(), list(), face_flag_t]
+        features_t[0].extend(ob_class_t)
+        features_t[1].extend(ob_class_t)
+        features_t[1].extend(scene_event_t)
+        features_t[2].extend(ob_class_t)
+        features_t[2].extend(object_name_t)
+        scene_name_t = ""
+        if scene_t:
+            scene_name_t = scene_t
+            features_t[0].append(scene_name_t)
+        privacy_task = loop.create_task(self.api_process.privacy_degree(features_t))
         if context_fenci_t:
             text_task = loop.create_task(self.api_process.text_detect(
                 tmp_img_path,
@@ -98,42 +109,38 @@ class AlbumDBManager:
                 context_pos_t,
                 context_t,
                 object_box_t,
-                object_name_t
+                object_name_t,
+                ob_class_t
             ))
-            await asyncio.wait([face_task, scene_task, text_task,], return_when=asyncio.ALL_COMPLETED)
+            await asyncio.wait([face_task, privacy_task, text_task,], return_when=asyncio.ALL_COMPLETED)
             all_locs_t = text_task.result()
         else:
-            await asyncio.wait([face_task, scene_task,], return_when=asyncio.ALL_COMPLETED)
+            await asyncio.wait([face_task, privacy_task,], return_when=asyncio.ALL_COMPLETED)
             all_locs_t = list()
-        match_names_t, match_locs_t, name_to_loc_t, face_locations_t = face_task.result()
-        scene_result_t = scene_task.result()
-        if all_locs_t is None or match_names_t is None or scene_result_t is None:
+        user_loc_t = face_task.result()
+        score_t = privacy_task.result()
+        if all_locs_t is None or user_loc_t is None or score_t is None:
             # 接口调用失败，退出
             os.remove(tmp_img_path)
             return False
-        scene_t = self.user_manager.detect_scene_privacy(scene_result_t, user_privacy_t["scene_privacy"])
-        scene_name_t = ""
-        if scene_t:
-            scene_name_t = scene_t
         print("all_locs_t")
         pprint.pprint(all_locs_t)
-        print("name_to_loc_t")
-        pprint.pprint(name_to_loc_t)
+        print("user_loc_t")
+        pprint.pprint(user_loc_t)
         print("scene_name_t")
         print(scene_name_t)
+        print("score_t")
+        print(score_t)
         # 删除临时文件
         os.remove(tmp_img_path)
 
         done_faces_t = list()
         face_users = list()
-        if isinstance(match_names_t, list) and len(match_names_t) > 0:
-            get_user_t = list()
-            for m_user_t in match_names_t:
-                if m_user_t != _user_id:
-                    get_user_t.append(m_user_t)
+        if isinstance(user_loc_t, dict) and len(user_loc_t) > 0:
+            get_user_t = list(user_loc_t.keys())
             face_users = await self.user_manager.find_user_has_face(get_user_t)
             for f_user_t in face_users:
-                done_faces_t.append(name_to_loc_t[f_user_t])
+                done_faces_t.append(user_loc_t[f_user_t])
         
         privacy_loc_dict_t = dict()
         for p_index_t, loc_t in enumerate(all_locs_t, 0):
@@ -141,15 +148,18 @@ class AlbumDBManager:
 
         img_id_t = await self.image_manager.insert_image(_user_id, "album", _suffix, _image_data)
         if img_id_t == 0:
+            print("ins fail")
             return False
         insert_t = {
             "userID": _user_id,
             "text": _text,
             "imageID": img_id_t,
-            "face_loc": name_to_loc_t,
+            "face_loc": user_loc_t,
             "face_users": face_users,
             "privacy_loc": privacy_loc_dict_t,
             "privacy_index": list(),
+            "scene": scene_name_t,
+            "score": score_t,
             "date": Int64(int(time.time()*1000))
         }
         result_t = await self.db_tools.insert(self.album_coll, insert_t)
@@ -158,7 +168,10 @@ class AlbumDBManager:
                 "imageID": img_id_t,
                 "face_to_loc": done_faces_t,
                 "privacy_loc": privacy_loc_dict_t,
+                "scene": scene_name_t,
+                "score": score_t,
             }
+        print("inss fail")
         return False
 
     async def ensure_privacy_loc(self, _user_id, _image_id, _privacy_index):
@@ -214,6 +227,8 @@ class AlbumDBManager:
                 "privacy_loc": img_t["privacy_loc"],
                 "text": img_t["text"],
                 "face_to_loc": list(),
+                "scene": img_t["scene"],
+                "score": img_t["score"],
                 "date": int(img_t["date"])
             }
             for f_user_t in img_t["face_users"]:
@@ -233,18 +248,19 @@ class AlbumDBManager:
         tmp_img_path = os.path.abspath(os.path.join(self.tmp_file_path, tmp_img_id))
         with open(tmp_img_path, "wb") as tmp_f:
             tmp_f.write(_image_data)
-        face_code_t = await self.api_process.face_get_code(tmp_img_path)
+        token_t = await self.api_process.add_face(tmp_img_path, _user_id):
+        if token_t is None:
+            os.remove(tmp_img_path)
+            return False
         # 删除临时文件
         os.remove(tmp_img_path)
-        if face_code_t is None:
-            return False
         img_id_t = await self.image_manager.insert_image(_user_id, "face", _suffix, _image_data)
         if img_id_t == 0:
             return False
         insert_t = {
             "userID": _user_id,
             "imageID": img_id_t,
-            "code": list(face_code_t),
+            "token": token_t,
             "date": Int64(int(time.time()*1000))
         }
         result_t = await self.db_tools.insert(self.face_coll, insert_t)
@@ -256,11 +272,16 @@ class AlbumDBManager:
         """
         删除人脸图片
         """
-        await self.image_manager.delete_image(_user_id, _image_id)
         index_t = {
             "userID": _user_id,
             "imageID": _image_id,
         }
+        face_info_t = await self.db_tools.find(self.face_coll, index_t).to_list(10)
+        face_token_t = face_info_t[0]["token"]
+        state_t = await self.api_process.delete_face(face_token_t, _user_id)
+        if not state_t:
+            return False
+        await self.image_manager.delete_image(_user_id, _image_id)
         result_t = await self.db_tools.delete(self.face_coll, index_t)
         if result_t.acknowledged and result_t.deleted_count > 0:
             return True
