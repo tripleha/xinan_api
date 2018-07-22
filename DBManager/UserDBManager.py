@@ -142,9 +142,29 @@ class UserDBManager:
         获取当前的用户关注的场景信息
         """
         for scene in scene_result:
-            if scene in self.scene_privacy_list and scene_result[scene] > 0.2:
+            if scene in self.scene_privacy_list:
                 return scene
         return False
+
+    async def find_num_in_user(self, _num_list):
+        """
+        获取数字信息是否存在于用户数据中
+        """
+        has_list_t = list()
+        for num_t in _num_list:
+            index_t = {
+                "$or": [
+                    {
+                        "phone_num": num_t,
+                    },
+                    {
+                        "idcard_num": num_t,
+                    },
+                ],
+            }
+            if await self.db_tools.find(self.user_coll, index_t).count():
+                has_list_t.append(num_t)
+        return has_list_t
 
     async def find_user_has_face(self, _user_ids):
         """

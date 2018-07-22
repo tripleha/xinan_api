@@ -61,6 +61,7 @@ class AlbumDBManager:
         """
         向用户相册添加照片
         """
+        start_t = time.time()
         # 获取用户隐私设置
         user_privacy_t = await self.user_manager.get_user_privacy_setting(_user_id)
         if not user_privacy_t:
@@ -113,10 +114,16 @@ class AlbumDBManager:
                 ob_class_t
             ))
             await asyncio.wait([face_task, privacy_task, text_task,], return_when=asyncio.ALL_COMPLETED)
-            all_locs_t = text_task.result()
+            all_locs_t, num_loc_t = text_task.result()
+            if num_loc_t:
+                privacy_num_list_t = await self.user_manager.find_num_in_user(num_loc_t.keys())
+                privacy_num_locs_t = [num_loc_t[num_t] for num_t in num_loc_t if num_loc_t[num_t] in privacy_num_list_t]
+            else:
+                privacy_num_locs_t = list()
         else:
             await asyncio.wait([face_task, privacy_task,], return_when=asyncio.ALL_COMPLETED)
             all_locs_t = list()
+            privacy_num_locs_t = list()
         user_loc_t = face_task.result()
         score_t = privacy_task.result()
         if all_locs_t is None or user_loc_t is None or score_t is None:
@@ -125,6 +132,8 @@ class AlbumDBManager:
             return False
         print("all_locs_t")
         pprint.pprint(all_locs_t)
+        print("privacy_num_locs_t")
+        pprint.pprint(privacy_num_locs_t)
         print("user_loc_t")
         pprint.pprint(user_loc_t)
         print("scene_name_t")
@@ -158,16 +167,20 @@ class AlbumDBManager:
             "face_users": face_users,
             "privacy_loc": privacy_loc_dict_t,
             "privacy_index": list(),
+            "privacy_num_loc": privacy_num_locs_t,
             "scene": scene_name_t,
             "score": score_t,
             "date": Int64(int(time.time()*1000))
         }
         result_t = await self.db_tools.insert(self.album_coll, insert_t)
         if result_t.acknowledged and result_t.inserted_id is not None:
+            end_t = time.time() - start_t
+            print("success use %.6f" % end_t)
             return {
                 "imageID": img_id_t,
                 "face_to_loc": done_faces_t,
                 "privacy_loc": privacy_loc_dict_t,
+                "privacy_num_loc": privacy_num_locs_t,
                 "scene": scene_name_t,
                 "score": score_t,
             }
@@ -225,6 +238,7 @@ class AlbumDBManager:
                 "imageID": img_t["imageID"],
                 "privacy_index": img_t["privacy_index"],
                 "privacy_loc": img_t["privacy_loc"],
+                "privacy_num_loc": img_t["privacy_num_loc"],
                 "text": img_t["text"],
                 "face_to_loc": list(),
                 "scene": img_t["scene"],
@@ -248,7 +262,7 @@ class AlbumDBManager:
         tmp_img_path = os.path.abspath(os.path.join(self.tmp_file_path, tmp_img_id))
         with open(tmp_img_path, "wb") as tmp_f:
             tmp_f.write(_image_data)
-        token_t = await self.api_process.add_face(tmp_img_path, _user_id):
+        token_t = await self.api_process.add_face(tmp_img_path, _user_id)
         if token_t is None:
             os.remove(tmp_img_path)
             return False
