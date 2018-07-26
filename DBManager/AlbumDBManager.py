@@ -118,7 +118,12 @@ class AlbumDBManager:
             all_locs_t, num_loc_t = text_task.result()
             if num_loc_t:
                 privacy_num_list_t = await self.user_manager.find_num_in_user(num_loc_t.keys())
-                privacy_num_locs_t = [num_loc_t[num_t] for num_t in num_loc_t if num_loc_t[num_t] in privacy_num_list_t]
+                print("privacy_num_list_t")
+                print(privacy_num_list_t)
+                privacy_num_locs_t = [num_loc_t[num_t] for num_t in num_loc_t if num_t in privacy_num_list_t]
+                for nloc_t in privacy_num_locs_t:
+                    if nloc_t in all_locs_t:
+                        all_locs_t.remove(nloc_t)
             else:
                 privacy_num_locs_t = list()
         else:
@@ -156,6 +161,8 @@ class AlbumDBManager:
         face_users = list()
         if isinstance(user_loc_t, dict) and len(user_loc_t) > 0:
             get_user_t = list(user_loc_t.keys())
+            if _user_id in get_user_t:
+                get_user_t.remove(_user_id)
             face_users = await self.user_manager.find_user_has_face(get_user_t)
             for f_user_t in face_users:
                 done_faces_t.append(user_loc_t[f_user_t])

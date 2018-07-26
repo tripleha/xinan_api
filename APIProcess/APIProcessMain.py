@@ -133,11 +133,11 @@ class APIProcessMain:
                         if result_t["code"] == 1:
                             return result_t["all_locs"]
                         else:
-                            return None
+                            return None, None
             except:
                 print(traceback.format_exc())
                 r_t += 1
-        return None
+        return None, None
 
     async def add_face(self, _image_path, _user_id):
         """
