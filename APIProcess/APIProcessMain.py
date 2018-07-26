@@ -99,15 +99,15 @@ class APIProcessMain:
                         resp_content = await resp.read()
                         result_t = json.loads(resp_content)
                         if result_t["code"] == 1:
-                            return result_t["context_fenci"], result_t["context_pos"], result_t["context"]
+                            return result_t["context_fenci"], result_t["context_pos"], result_t["context"], result_t["chars_pos"]
                         else:
-                            return None, None, None
+                            return None, None, None, None
             except:
                 print(traceback.format_exc())
                 r_t += 1
-        return None, None, None
+        return None, None, None, None
 
-    async def text_detect(self, _image_path, _user_setting, _context_fenci, _context_pos, _context, _object_box, _class_name, _object_class):
+    async def text_detect(self, _image_path, _user_setting, _context_fenci, _context_pos, _context, _chars_pos, _object_box, _class_name, _object_class):
         """
         文字隐私校验API接口
         """
@@ -118,6 +118,7 @@ class APIProcessMain:
             "context_fenci": _context_fenci,
             "context_pos": _context_pos,
             "context": _context,
+            "chars_pos": _chars_pos,
             "object_box": _object_box,
             "class_name": _class_name,
             "object_class": _object_class,

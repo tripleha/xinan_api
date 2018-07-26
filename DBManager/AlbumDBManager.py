@@ -81,7 +81,7 @@ class AlbumDBManager:
         get_face_task = loop.create_task(self.api_process.get_face(tmp_img_path))
         scene_task = loop.create_task(self.api_process.scene_detect(tmp_img_path))
         await asyncio.wait([object_task, ob_baidu_task, ocr_task, get_face_task, scene_task,], return_when=asyncio.ALL_COMPLETED)
-        context_fenci_t, context_pos_t, context_t = ocr_task.result()
+        context_fenci_t, context_pos_t, context_t, chars_pos_t = ocr_task.result()
         object_box_t, object_name_t = object_task.result()
         ob_class_t = ob_baidu_task.result()
         face_flag_t = get_face_task.result()
@@ -109,6 +109,7 @@ class AlbumDBManager:
                 context_fenci_t,
                 context_pos_t,
                 context_t,
+                chars_pos_t,
                 object_box_t,
                 object_name_t,
                 ob_class_t
@@ -130,6 +131,14 @@ class AlbumDBManager:
             # 接口调用失败，退出
             os.remove(tmp_img_path)
             return False
+        print("context_fenci_t")
+        pprint.pprint(context_fenci_t)
+        print("context_pos_t")
+        pprint.pprint(context_pos_t)
+        print("context_t")
+        pprint.pprint(context_t)
+        print("chars_pos_t")
+        pprint.pprint(chars_pos_t)
         print("all_locs_t")
         pprint.pprint(all_locs_t)
         print("privacy_num_locs_t")
