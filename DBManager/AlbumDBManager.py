@@ -90,17 +90,17 @@ class AlbumDBManager:
             # 接口调用失败，退出
             os.remove(tmp_img_path)
             return False
-        scene_t = self.user_manager.detect_scene_privacy(scene_class_t, user_privacy_t["scene_privacy"])
+        # scene_t = self.user_manager.detect_scene_privacy(scene_class_t, user_privacy_t["scene_privacy"])
         features_t = [list(), list(), list(), face_flag_t]
         features_t[0].extend(ob_class_t)
         features_t[1].extend(ob_class_t)
         features_t[1].extend(scene_event_t)
         features_t[2].extend(ob_class_t)
         features_t[2].extend(object_name_t)
-        scene_name_t = ""
-        if scene_t:
-            scene_name_t = scene_t
-            features_t[0].append(scene_name_t)
+        # scene_name_t = ""
+        if scene_class_t:
+            # scene_name_t = scene_t
+            features_t[0].extend(scene_class_t)
         privacy_task = loop.create_task(self.api_process.privacy_degree(features_t))
         if context_fenci_t:
             text_task = loop.create_task(self.api_process.text_detect(
@@ -150,8 +150,8 @@ class AlbumDBManager:
         pprint.pprint(privacy_num_locs_t)
         print("user_loc_t")
         pprint.pprint(user_loc_t)
-        print("scene_name_t")
-        print(scene_name_t)
+        print("scene_class_t")
+        print(scene_class_t)
         print("score_t")
         print(score_t)
         # 删除临时文件
@@ -184,7 +184,7 @@ class AlbumDBManager:
             "privacy_loc": privacy_loc_dict_t,
             "privacy_index": list(),
             "privacy_num_loc": privacy_num_locs_t,
-            "scene": scene_name_t,
+            "scene": scene_class_t,
             "score": score_t,
             "date": Int64(int(time.time()*1000))
         }
@@ -197,7 +197,7 @@ class AlbumDBManager:
                 "face_to_loc": done_faces_t,
                 "privacy_loc": privacy_loc_dict_t,
                 "privacy_num_loc": privacy_num_locs_t,
-                "scene": scene_name_t,
+                "scene": scene_class_t,
                 "score": score_t,
             }
         print("inss fail")
